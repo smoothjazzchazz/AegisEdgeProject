@@ -7,7 +7,6 @@ import os
 from foundry.transforms import Dataset, Column
 import base64
 import io
-from scipy.spatial import ConvexHull
 from scipy.interpolate import CubicSpline
 import warnings
 warnings.filterwarnings('ignore')
