@@ -50,16 +50,18 @@ def analyze_collision(
     if common.empty:
         raise ValueError("No overlapping flight times found.")
 
-    common["distance"] = np.sqrt(
-        (
-            (common["longitude_1"] - common["longitude_2"])
-            * 111320
-            * np.cos(np.radians(common["latitude_1"]))
-        )
-        ** 2
-        + ((common["latitude_1"] - common["latitude_2"]) * 111320) ** 2
-        + (common["altitude_1"] - common["altitude_2"]) ** 2
-    )
+    # Cleaner numbers + numpy utilizes SIMD
+    lat1 = common["latitude_1"].to_numpy()
+    lat2 = common["latitude_2"].to_numpy()
+    lon1 = common["longitude_1"].to_numpy()
+    lon2 = common["longitude_2"].to_numpy()
+    alt1 = common["altitude_1"].to_numpy()
+    alt2 = common["altitude_2"].to_numpy()
+    dx = (lon1 - lon2) * 111320 * np.cos(np.radians(lat1))
+    dy = (lat1 - lat2) * 111320
+    dz = alt1 - alt2
+    
+    common["distance"] = np.sqrt(dx**2 + dy**2 + dz**2)
 
     common["collision_risk"] = (1 / (common["distance"] / threshold_m)).clip(0, 1)
 
