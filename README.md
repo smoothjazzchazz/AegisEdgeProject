@@ -15,6 +15,7 @@ From the repo root (Windows):
 ```
 
 Or double-click / run `quickstart.bat`.
+Or run `./quickstart.sh` on Linux/macOS.
 
 That installs deps if needed and opens two terminals:
 
