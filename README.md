@@ -27,11 +27,16 @@ Stop everything:
 ```powershell
 .\quickstart.ps1 -Stop
 ```
-
+```bash
+./quickstart.sh --stop
+```
 Skip reinstalls on subsequent runs:
 
 ```powershell
 .\quickstart.ps1 -SkipInstall
+```
+```bash
+./quickstart.sh --skip-install
 ```
 
 ### Manual
