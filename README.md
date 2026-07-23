@@ -15,6 +15,7 @@ From the repo root (Windows):
 ```
 
 Or double-click / run `quickstart.bat`.
+Or run `./quickstart.sh` on Linux/macOS.
 
 That installs deps if needed and opens two terminals:
 
@@ -26,11 +27,16 @@ Stop everything:
 ```powershell
 .\quickstart.ps1 -Stop
 ```
-
+```bash
+./quickstart.sh --stop
+```
 Skip reinstalls on subsequent runs:
 
 ```powershell
 .\quickstart.ps1 -SkipInstall
+```
+```bash
+./quickstart.sh --skip-install
 ```
 
 ### Manual
