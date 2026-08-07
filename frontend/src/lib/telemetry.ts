@@ -1,5 +1,16 @@
 import type { TelemetryPoint } from '@/types/telemetry'
 
+const timesCache = new WeakMap<TelemetryPoint[], number[]>()
+
+function getTimes(series: TelemetryPoint[]): number[] {
+  let times = timesCache.get(series)
+  if (!times) {
+    times = series.map((p) => new Date(p.timestamp).getTime())
+    timesCache.set(series, times)
+  }
+  return times
+}
+
 export function pointsByDrone(
   points: TelemetryPoint[],
   ids: string[],
@@ -16,13 +27,29 @@ export function pointsByDrone(
   return map
 }
 
+/** Last index with timestamp <= tMs, or -1 if none. */
+export function indexAtOrBefore(series: TelemetryPoint[], tMs: number): number {
+  if (!series.length) return -1
+  const times = getTimes(series)
+  if (tMs < times[0]) return -1
+  if (tMs >= times[times.length - 1]) return times.length - 1
+  let lo = 0
+  let hi = times.length - 1
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1
+    if (times[mid] <= tMs) lo = mid
+    else hi = mid
+  }
+  return times[hi] <= tMs ? hi : lo
+}
+
 /** Interpolate position for aircraft at time t (ms). */
 export function sampleAt(
   series: TelemetryPoint[],
   tMs: number,
 ): TelemetryPoint | null {
   if (!series.length) return null
-  const times = series.map((p) => new Date(p.timestamp).getTime())
+  const times = getTimes(series)
   if (tMs <= times[0]) return series[0]
   if (tMs >= times[times.length - 1]) return series[series.length - 1]
 
@@ -58,5 +85,7 @@ function shortestAngleDelta(a: number, b: number): number {
 }
 
 export function seriesUpTo(series: TelemetryPoint[], tMs: number): TelemetryPoint[] {
-  return series.filter((p) => new Date(p.timestamp).getTime() <= tMs)
+  const idx = indexAtOrBefore(series, tMs)
+  if (idx < 0) return []
+  return series.slice(0, idx + 1)
 }

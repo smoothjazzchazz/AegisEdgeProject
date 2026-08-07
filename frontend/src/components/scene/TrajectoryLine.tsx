@@ -1,25 +1,37 @@
 import { Line } from '@react-three/drei'
-import { useMemo } from 'react'
+import { useFrame } from '@react-three/fiber'
+import { useMemo, useRef, useState } from 'react'
 import type { TelemetryPoint } from '@/types/telemetry'
 import { toLocal, type Origin } from '@/lib/geo'
-import { seriesUpTo } from '@/lib/telemetry'
+import { indexAtOrBefore } from '@/lib/telemetry'
+import { visualTRef } from '@/lib/replayClock'
 
 interface Props {
   points: TelemetryPoint[]
   color: string
-  tMs: number
   origin: Origin
 }
 
-export function TrajectoryLine({ points, color, tMs, origin }: Props) {
-  const { full, played } = useMemo(() => {
-    const fullPts = points.map((p) => toLocal(p.latitude, p.longitude, p.altitude, origin))
-    const playedSeries = seriesUpTo(points, tMs)
-    const playedPts = playedSeries.map((p) =>
-      toLocal(p.latitude, p.longitude, p.altitude, origin),
-    )
-    return { full: fullPts, played: playedPts }
-  }, [points, tMs, origin])
+export function TrajectoryLine({ points, color, origin }: Props) {
+  const full = useMemo(
+    () => points.map((p) => toLocal(p.latitude, p.longitude, p.altitude, origin)),
+    [points, origin],
+  )
+
+  const endRef = useRef(0)
+  const [playedEnd, setPlayedEnd] = useState(() =>
+    Math.max(0, indexAtOrBefore(points, visualTRef.current) + 1),
+  )
+
+  useFrame(() => {
+    const next = Math.max(0, indexAtOrBefore(points, visualTRef.current) + 1)
+    if (next !== endRef.current) {
+      endRef.current = next
+      setPlayedEnd(next)
+    }
+  })
+
+  const played = useMemo(() => full.slice(0, playedEnd), [full, playedEnd])
 
   if (full.length < 2) return null
 

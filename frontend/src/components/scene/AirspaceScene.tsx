@@ -1,9 +1,10 @@
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useThree } from '@react-three/fiber'
 import { Grid, OrbitControls, PerspectiveCamera } from '@react-three/drei'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useOpsStore } from '@/hooks/useOpsStore'
 import { computeOrigin } from '@/lib/geo'
 import { buildingsAtRisk, buildingsClassifiedDuringFlight } from '@/lib/buildings'
+import { orbitDraggingRef } from '@/lib/replayClock'
 import { pointsByDrone, sampleAt } from '@/lib/telemetry'
 import { DRONE_COLORS } from '@/types/telemetry'
 import { TrajectoryLine } from './TrajectoryLine'
@@ -12,6 +13,34 @@ import { RiskZoneMesh } from './RiskZoneMesh'
 import { CorridorPath } from './CorridorPath'
 import { BuildingMesh } from './BuildingMesh'
 import { ClearanceLink } from './ClearanceLink'
+
+/** Drop pixel ratio while orbiting so pointer/damping stay smooth. */
+function OrbitDragDpr() {
+  const gl = useThree((s) => s.gl)
+
+  useEffect(() => {
+    const base = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio : 1)
+    gl.setPixelRatio(base)
+  }, [gl])
+
+  return (
+    <OrbitControls
+      makeDefault
+      enableDamping
+      dampingFactor={0.08}
+      maxPolarAngle={Math.PI / 2.05}
+      onStart={() => {
+        orbitDraggingRef.current = true
+        gl.setPixelRatio(1)
+      }}
+      onEnd={() => {
+        orbitDraggingRef.current = false
+        const base = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio : 1)
+        gl.setPixelRatio(base)
+      }}
+    />
+  )
+}
 
 function SceneContents() {
   const points = useOpsStore((s) => s.points)
@@ -52,7 +81,7 @@ function SceneContents() {
     return { collisionIds, riskIds }
   }, [buildings, selectedIds, byDrone, thresholdM])
 
-  // Live clearance for EVERY selected aircraft (links + highlight union)
+  // Live clearance at throttled UI `t` (links + highlight union)
   const liveByDrone = useMemo(() => {
     const rows: {
       aircraftId: string
@@ -102,7 +131,7 @@ function SceneContents() {
       <ambientLight intensity={0.55} />
       <directionalLight position={[5, 10, 5]} intensity={0.85} />
       <PerspectiveCamera makeDefault position={[3.5, 2.8, 3.5]} fov={50} />
-      <OrbitControls makeDefault enableDamping dampingFactor={0.08} maxPolarAngle={Math.PI / 2.05} />
+      <OrbitDragDpr />
       <Grid
         infiniteGrid
         fadeDistance={40}
@@ -118,11 +147,10 @@ function SceneContents() {
         const series = byDrone.get(id) ?? []
         if (!series.length) return null
         const color = colorOf(id)
-        const sample = sampleAt(series, t)
         return (
           <group key={id}>
-            <TrajectoryLine points={series} color={color} tMs={t} origin={origin} />
-            {sample && <DroneMesh sample={sample} color={color} origin={origin} selected />}
+            <TrajectoryLine points={series} color={color} origin={origin} />
+            <DroneMesh series={series} color={color} origin={origin} selected />
           </group>
         )
       })}
@@ -177,23 +205,40 @@ function BuildingHud() {
   const buildingsVisible = useOpsStore((s) => s.buildingsVisible)
   const thresholdM = useOpsStore((s) => s.buildingThresholdM)
 
-  const readout = useMemo(() => {
-    if (!buildingsVisible || !buildings.length || !selectedIds.length) return null
-    const byDroneMap = pointsByDrone(points, selectedIds)
+  const byDroneMap = useMemo(
+    () => pointsByDrone(points, selectedIds),
+    [points, selectedIds],
+  )
 
+  // Flight-wide classify is independent of scrubber time — do not recompute on `t`
+  const flightClass = useMemo(() => {
     const collisionIds = new Set<string>()
     const riskIds = new Set<string>()
-    let bestLive: {
-      callsign: string
-      nearest: NonNullable<ReturnType<typeof buildingsAtRisk>['nearest']>
-    } | null = null
-
+    if (!buildingsVisible || !buildings.length || !selectedIds.length) {
+      return { collisionIds, riskIds }
+    }
     for (const id of selectedIds) {
       const series = byDroneMap.get(id) ?? []
       const partial = buildingsClassifiedDuringFlight(series, buildings, thresholdM)
       for (const bid of partial.collisionIds) collisionIds.add(bid)
       for (const bid of partial.riskIds) riskIds.add(bid)
+    }
+    for (const id of collisionIds) riskIds.delete(id)
+    return { collisionIds, riskIds }
+  }, [buildings, buildingsVisible, selectedIds, byDroneMap, thresholdM])
 
+  const readout = useMemo(() => {
+    if (!buildingsVisible || !buildings.length || !selectedIds.length) return null
+
+    let bestLive: {
+      callsign: string
+      nearest: NonNullable<ReturnType<typeof buildingsAtRisk>['nearest']>
+    } | null = null
+    const collisionIds = new Set(flightClass.collisionIds)
+    const riskIds = new Set(flightClass.riskIds)
+
+    for (const id of selectedIds) {
+      const series = byDroneMap.get(id) ?? []
       const sample = sampleAt(series, t)
       if (!sample) continue
       const live = buildingsAtRisk(
@@ -223,7 +268,16 @@ function BuildingHud() {
       liveCollision: bestLive.nearest.penetrating,
       selectedCount: selectedIds.length,
     }
-  }, [buildings, buildingsVisible, selectedIds, points, t, thresholdM])
+  }, [
+    buildings,
+    buildingsVisible,
+    selectedIds,
+    byDroneMap,
+    t,
+    thresholdM,
+    flightClass.collisionIds,
+    flightClass.riskIds,
+  ])
 
   if (!readout?.nearest) {
     if (!buildings.length) return null

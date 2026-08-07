@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { visualTRef } from '@/lib/replayClock'
 import type {
   BuildingRiskResponse,
   CollisionResponse,
@@ -88,11 +89,13 @@ export const useOpsStore = create<OpsState>((set, get) => ({
     const selected = get().selectedIds.filter((id) =>
       drones.some((d) => d.aircraft_id === id),
     )
+    const nextT = get().t >= min && get().t <= max ? get().t : min
+    visualTRef.current = nextT
     set({
       drones,
       tMin: min,
       tMax: max,
-      t: get().t >= min && get().t <= max ? get().t : min,
+      t: nextT,
       selectedIds: selected.length ? selected : drones.map((d) => d.aircraft_id),
     })
   },
@@ -105,7 +108,10 @@ export const useOpsStore = create<OpsState>((set, get) => ({
     })
   },
   setPoints: (points) => set({ points }),
-  setT: (t) => set({ t }),
+  setT: (t) => {
+    visualTRef.current = t
+    set({ t })
+  },
   setPlaying: (playing) => set({ playing }),
   setSpeed: (speed) => set({ speed }),
   setDrawer: (drawer) => set({ drawer }),
