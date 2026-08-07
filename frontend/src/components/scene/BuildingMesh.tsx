@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import * as THREE from 'three'
 import type { OsmBuilding } from '@/types/telemetry'
 import { toLocal, type Origin } from '@/lib/geo'
@@ -74,7 +74,12 @@ function buildPrismGeometry(
   return geo
 }
 
-export function BuildingMesh({ building, origin, hot, hit }: Props) {
+export const BuildingMesh = memo(function BuildingMesh({
+  building,
+  origin,
+  hot,
+  hit,
+}: Props) {
   const geometry = useMemo(
     () => buildPrismGeometry(building.footprint, building.height_m, origin),
     [building, origin],
@@ -120,4 +125,4 @@ export function BuildingMesh({ building, origin, hot, hit }: Props) {
       )}
     </group>
   )
-}
+})
